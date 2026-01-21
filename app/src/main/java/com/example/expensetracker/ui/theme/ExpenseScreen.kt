@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,6 +26,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -70,6 +72,9 @@ fun ExpenseScreen(
     val horaRecordatorio by viewModel.horaRecordatorio.collectAsState()
     val minutoRecordatorio by viewModel.minutoRecordatorio.collectAsState()
 
+    // Estado para edición de gasto
+    var gastoEditando by remember { mutableStateOf<ExpenseEntity?>(null) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -88,7 +93,7 @@ fun ExpenseScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Formulario para agregar gasto
+            // Formulario para agregar/editar gasto
             FormularioGasto(
                 monto = monto,
                 descripcion = descripcion,
@@ -97,7 +102,28 @@ fun ExpenseScreen(
                 onMontoChange = { viewModel.actualizarMonto(it) },
                 onDescripcionChange = { viewModel.actualizarDescripcion(it) },
                 onCategoriaChange = { viewModel.seleccionarCategoria(it) },
-                onGuardar = { viewModel.guardarGasto() }
+                onGuardar = {
+                    if (gastoEditando != null) {
+                        // Actualizar gasto existente
+                        val gastoActualizado = gastoEditando!!.copy(
+                            monto = monto.toDoubleOrNull() ?: gastoEditando!!.monto,
+                            descripcion = descripcion,
+                            categoria = categoriaSeleccionada
+                        )
+                        viewModel.actualizarGasto(gastoActualizado)
+                        gastoEditando = null
+                        viewModel.actualizarMonto("")
+                        viewModel.actualizarDescripcion("")
+                    } else {
+                        viewModel.guardarGasto()
+                    }
+                },
+                modoEdicion = gastoEditando != null,
+                onCancelarEdicion = {
+                    gastoEditando = null
+                    viewModel.actualizarMonto("")
+                    viewModel.actualizarDescripcion("")
+                }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -130,8 +156,8 @@ fun ExpenseScreen(
             ) {
                 Text(
                     text = "Total: $${String.format("%.2f", total ?: 0.0)}",
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(16.dp)
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.titleMedium
                 )
             }
 
@@ -155,7 +181,13 @@ fun ExpenseScreen(
                 gastos.forEach { gasto ->
                     GastoItem(
                         gasto = gasto,
-                        onEliminar = { viewModel.eliminarGasto(gasto) }
+                        onEliminar = { viewModel.eliminarGasto(gasto) },
+                        onEditar = {
+                            gastoEditando = gasto
+                            viewModel.actualizarMonto(gasto.monto.toString())
+                            viewModel.actualizarDescripcion(gasto.descripcion)
+                            viewModel.seleccionarCategoria(gasto.categoria)
+                        }
                     )
                 }
             }
@@ -298,7 +330,9 @@ fun FormularioGasto(
     onMontoChange: (String) -> Unit,
     onDescripcionChange: (String) -> Unit,
     onCategoriaChange: (String) -> Unit,
-    onGuardar: () -> Unit
+    onGuardar: () -> Unit,
+    modoEdicion: Boolean = false,
+    onCancelarEdicion: (() -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -311,7 +345,7 @@ fun FormularioGasto(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Nuevo Gasto",
+                text = if (modoEdicion) "Editar Gasto" else "Nuevo Gasto",
                 style = MaterialTheme.typography.titleMedium
             )
 
@@ -369,12 +403,22 @@ fun FormularioGasto(
                 }
             }
 
-            // Botón guardar
+            // Botón guardar/actualizar
             Button(
                 onClick = onGuardar,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Guardar")
+                Text(if (modoEdicion) "Actualizar" else "Guardar")
+            }
+
+            // Botón cancelar edición
+            if (modoEdicion && onCancelarEdicion != null) {
+                OutlinedButton(
+                    onClick = onCancelarEdicion,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    Text("Cancelar edición")
+                }
             }
         }
     }
@@ -386,7 +430,8 @@ fun FormularioGasto(
 @Composable
 fun GastoItem(
     gasto: ExpenseEntity,
-    onEliminar: () -> Unit
+    onEliminar: () -> Unit,
+    onEditar: () -> Unit
 ) {
     val fechaFormateada = remember(gasto.fecha) {
         val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
@@ -396,7 +441,8 @@ fun GastoItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(vertical = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
         Row(
             modifier = Modifier
@@ -422,7 +468,13 @@ fun GastoItem(
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary
             )
-
+            IconButton(onClick = onEditar) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Editar",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
             IconButton(onClick = onEliminar) {
                 Icon(
                     imageVector = Icons.Default.Delete,

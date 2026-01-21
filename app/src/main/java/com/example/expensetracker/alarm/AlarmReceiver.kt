@@ -39,6 +39,8 @@ class AlarmReceiver : BroadcastReceiver() {
             ).apply {
                 description = "Recordatorios diarios de gastos"
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 500, 100, 500)
+                setSound(android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION), null)
             }
             notificationManager.createNotificationChannel(canal)
         }
@@ -62,6 +64,8 @@ class AlarmReceiver : BroadcastReceiver() {
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 500, 100, 500))
+            .setSound(android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION))
             .build()
 
         notificationManager.notify(NOTIFICATION_ID, notificacion)
