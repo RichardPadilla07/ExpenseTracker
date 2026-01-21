@@ -1,91 +1,52 @@
 package com.example.expensetracker.ui.theme
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTimePickerState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.expensetracker.data.local.ExpenseEntity
-import java.text.SimpleDateFormat
-import java.util.Date
+import com.example.expensetracker.data.local.MedicamentoEntity
+import com.example.expensetracker.data.local.RecordatorioEntity
 import java.util.Locale
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
 
-/**
- * Pantalla principal de la aplicación.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExpenseScreen(
-    viewModel: ExpenseViewModel,
-    onRecordatorioChange: (Boolean, Int, Int) -> Unit
-) {
-    // Estados del formulario
-    val monto by viewModel.monto.collectAsState()
+fun MedicamentoScreen(viewModel: MedicamentoViewModel) {
+    val nombre by viewModel.nombre.collectAsState()
     val descripcion by viewModel.descripcion.collectAsState()
-    val categoriaSeleccionada by viewModel.categoriaSeleccionada.collectAsState()
-    val gastos by viewModel.gastos.collectAsState(initial = emptyList())
-    val total by viewModel.total.collectAsState(initial = 0.0)
+    val horarios by viewModel.horarios.collectAsState()
+    val medicamentosConRecordatorios by viewModel.medicamentosConRecordatorios.collectAsState(initial = emptyList())
 
-    // Estados del recordatorio
-    val recordatorioActivo by viewModel.recordatorioActivo.collectAsState()
-    val horaRecordatorio by viewModel.horaRecordatorio.collectAsState()
-    val minutoRecordatorio by viewModel.minutoRecordatorio.collectAsState()
+    var showTimePicker by remember { mutableStateOf(false) }
+    var timePickerIndex by remember { mutableStateOf(-1) }
+    var notificacionesActivas by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
-    // Estado para edición de gasto
-    var gastoEditando by remember { mutableStateOf<ExpenseEntity?>(null) }
+    var editando by remember { mutableStateOf(false) }
+    var medicamentoEdit by remember { mutableStateOf<MedicamentoEntity?>(null) }
+    var recordatoriosEdit by remember { mutableStateOf<List<RecordatorioEntity>>(emptyList()) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Mis Gastos") },
+                title = { Text("Gestión de Medicamentos") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer
                 )
             )
         }
     ) { paddingValues ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -93,195 +54,163 @@ fun ExpenseScreen(
                 .padding(16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Formulario para agregar/editar gasto
-            FormularioGasto(
-                monto = monto,
-                descripcion = descripcion,
-                categoriaSeleccionada = categoriaSeleccionada,
-                categorias = viewModel.categorias,
-                onMontoChange = { viewModel.actualizarMonto(it) },
-                onDescripcionChange = { viewModel.actualizarDescripcion(it) },
-                onCategoriaChange = { viewModel.seleccionarCategoria(it) },
-                onGuardar = {
-                    if (gastoEditando != null) {
-                        // Actualizar gasto existente
-                        val gastoActualizado = gastoEditando!!.copy(
-                            monto = monto.toDoubleOrNull() ?: gastoEditando!!.monto,
-                            descripcion = descripcion,
-                            categoria = categoriaSeleccionada
-                        )
-                        viewModel.actualizarGasto(gastoActualizado)
-                        gastoEditando = null
-                        viewModel.actualizarMonto("")
-                        viewModel.actualizarDescripcion("")
-                    } else {
-                        viewModel.guardarGasto()
+            // Formulario para agregar medicamento
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    OutlinedTextField(
+                        value = nombre,
+                        onValueChange = { viewModel.actualizarNombre(it) },
+                        label = { Text("Nombre del medicamento") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = descripcion,
+                        onValueChange = { viewModel.actualizarDescripcion(it) },
+                        label = { Text("Descripción") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Horarios de toma:", style = MaterialTheme.typography.bodyMedium)
+                    horarios.forEachIndexed { idx, (hora, minuto) ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(String.format(Locale.getDefault(), "%02d:%02d", hora, minuto),
+                                modifier = Modifier.weight(1f))
+                            IconButton(onClick = { viewModel.eliminarHorario(idx) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Eliminar horario")
+                            }
+                        }
                     }
-                },
-                modoEdicion = gastoEditando != null,
-                onCancelarEdicion = {
-                    gastoEditando = null
-                    viewModel.actualizarMonto("")
-                    viewModel.actualizarDescripcion("")
-                }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Configuración del recordatorio
-            ConfiguracionRecordatorio(
-                activo = recordatorioActivo,
-                hora = horaRecordatorio,
-                minuto = minutoRecordatorio,
-                onActivoChange = { nuevoEstado ->
-                    viewModel.cambiarEstadoRecordatorio(nuevoEstado)
-                    onRecordatorioChange(nuevoEstado, horaRecordatorio, minutoRecordatorio)
-                },
-                onHoraChange = { nuevaHora, nuevoMinuto ->
-                    viewModel.actualizarHoraRecordatorio(nuevaHora, nuevoMinuto)
-                    if (recordatorioActivo) {
-                        onRecordatorioChange(true, nuevaHora, nuevoMinuto)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(onClick = { showTimePicker = true; timePickerIndex = horarios.size }, modifier = Modifier.weight(1f)) {
+                            Text("Agregar horario")
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // Switch para activar/desactivar notificaciones
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (notificacionesActivas) "ON" else "OFF", modifier = Modifier.padding(end = 4.dp))
+                            Switch(
+                                checked = notificacionesActivas,
+                                onCheckedChange = { checked ->
+                                    notificacionesActivas = checked
+                                    if (checked && android.os.Build.VERSION.SDK_INT >= 33) {
+                                        val permission = android.Manifest.permission.POST_NOTIFICATIONS
+                                        if (ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) {
+                                            ActivityCompat.requestPermissions((context as android.app.Activity), arrayOf(permission), 100)
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Button(
+                            onClick = {
+                                viewModel.guardarMedicamento()
+                                editando = false
+                                medicamentoEdit = null
+                                recordatoriosEdit = emptyList()
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (viewModel.enEdicion) "Guardar cambios" else "Guardar medicamento")
+                        }
+                        if (viewModel.enEdicion) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.cancelarEdicion()
+                                    editando = false
+                                    medicamentoEdit = null
+                                    recordatoriosEdit = emptyList()
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Cancelar edición")
+                            }
+                        }
                     }
                 }
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Total gastado
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                )
-            ) {
-                Text(
-                    text = "Total: $${String.format("%.2f", total ?: 0.0)}",
-                    modifier = Modifier.padding(16.dp),
-                    style = MaterialTheme.typography.titleMedium
-                )
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Lista de gastos
-            Text(
-                text = "Historial",
-                style = MaterialTheme.typography.titleMedium
-            )
-
+            Spacer(modifier = Modifier.height(24.dp))
+            Text("Medicamentos y recordatorios", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
-
-            if (gastos.isEmpty()) {
-                Text(
-                    text = "No hay gastos registrados",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (medicamentosConRecordatorios.isEmpty()) {
+                Text("No hay medicamentos registrados", color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                gastos.forEach { gasto ->
-                    GastoItem(
-                        gasto = gasto,
-                        onEliminar = { viewModel.eliminarGasto(gasto) },
+                medicamentosConRecordatorios.forEach { mcr ->
+                    MedicamentoItem(
+                        medicamento = mcr.medicamento,
+                        recordatorios = mcr.recordatorios,
+                        onEliminarMedicamento = { viewModel.eliminarMedicamento(mcr.medicamento) },
+                        onEliminarRecordatorio = { viewModel.eliminarRecordatorio(it) },
                         onEditar = {
-                            gastoEditando = gasto
-                            viewModel.actualizarMonto(gasto.monto.toString())
-                            viewModel.actualizarDescripcion(gasto.descripcion)
-                            viewModel.seleccionarCategoria(gasto.categoria)
+                            viewModel.iniciarEdicion(mcr.medicamento, mcr.recordatorios)
+                            editando = true
+                            medicamentoEdit = mcr.medicamento
+                            recordatoriosEdit = mcr.recordatorios
                         }
                     )
                 }
             }
         }
     }
+    if (showTimePicker) {
+        val now = java.util.Calendar.getInstance()
+        TimePickerDialog(
+            horaInicial = now.get(java.util.Calendar.HOUR_OF_DAY),
+            minutoInicial = now.get(java.util.Calendar.MINUTE),
+            onConfirm = { h, m ->
+                viewModel.agregarHorario(h, m)
+                showTimePicker = false
+            },
+            onDismiss = { showTimePicker = false }
+        )
+    }
 }
 
-/**
- * Tarjeta de configuración del recordatorio.
- */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConfiguracionRecordatorio(
-    activo: Boolean,
-    hora: Int,
-    minuto: Int,
-    onActivoChange: (Boolean) -> Unit,
-    onHoraChange: (Int, Int) -> Unit
+fun MedicamentoItem(
+    medicamento: MedicamentoEntity,
+    recordatorios: List<RecordatorioEntity>,
+    onEliminarMedicamento: () -> Unit,
+    onEliminarRecordatorio: (RecordatorioEntity) -> Unit,
+    onEditar: () -> Unit
 ) {
-    var mostrarTimePicker by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer
-        )
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Recordatorio diario",
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Activar notificación",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Switch(
-                    checked = activo,
-                    onCheckedChange = onActivoChange
-                )
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(medicamento.nombre, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                IconButton(onClick = onEditar) {
+                    Icon(Icons.Default.Edit, contentDescription = "Editar medicamento", tint = MaterialTheme.colorScheme.primary)
+                }
+                IconButton(onClick = onEliminarMedicamento) {
+                    Icon(Icons.Default.Delete, contentDescription = "Eliminar medicamento", tint = MaterialTheme.colorScheme.error)
+                }
             }
-
-            // Selector de hora (solo visible si está activo)
-            if (activo) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { mostrarTimePicker = true },
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Hora del recordatorio",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-
-                    val horaFormateada = String.format("%02d:%02d", hora, minuto)
-                    Text(
-                        text = horaFormateada,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+            if (medicamento.descripcion.isNotBlank()) {
+                Text(medicamento.descripcion, style = MaterialTheme.typography.bodySmall)
+            }
+            if (recordatorios.isNotEmpty()) {
+                Text("Recordatorios:", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                recordatorios.forEach { rec ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(String.format(Locale.getDefault(), "%02d:%02d", rec.hora, rec.minuto), modifier = Modifier.weight(1f))
+                        IconButton(onClick = { onEliminarRecordatorio(rec) }) {
+                            Icon(Icons.Default.Delete, contentDescription = "Eliminar recordatorio", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
             }
         }
     }
-
-    // Diálogo con el TimePicker
-    if (mostrarTimePicker) {
-        TimePickerDialog(
-            horaInicial = hora,
-            minutoInicial = minuto,
-            onConfirm = { nuevaHora, nuevoMinuto ->
-                onHoraChange(nuevaHora, nuevoMinuto)
-                mostrarTimePicker = false
-            },
-            onDismiss = { mostrarTimePicker = false }
-        )
-    }
 }
 
-/**
- * Diálogo con el TimePicker de Material 3.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TimePickerDialog(
@@ -295,193 +224,17 @@ fun TimePickerDialog(
         initialMinute = minutoInicial,
         is24Hour = true
     )
-
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Seleccionar hora") },
-        text = {
-            TimePicker(state = timePickerState)
-        },
+        text = { TimePicker(state = timePickerState) },
         confirmButton = {
-            TextButton(
-                onClick = { onConfirm(timePickerState.hour, timePickerState.minute) }
-            ) {
+            TextButton(onClick = { onConfirm(timePickerState.hour, timePickerState.minute) }) {
                 Text("Aceptar")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
         }
     )
-}
-
-/**
- * Formulario para ingresar un nuevo gasto.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun FormularioGasto(
-    monto: String,
-    descripcion: String,
-    categoriaSeleccionada: String,
-    categorias: List<String>,
-    onMontoChange: (String) -> Unit,
-    onDescripcionChange: (String) -> Unit,
-    onCategoriaChange: (String) -> Unit,
-    onGuardar: () -> Unit,
-    modoEdicion: Boolean = false,
-    onCancelarEdicion: (() -> Unit)? = null
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = if (modoEdicion) "Editar Gasto" else "Nuevo Gasto",
-                style = MaterialTheme.typography.titleMedium
-            )
-
-            // Campo de monto
-            OutlinedTextField(
-                value = monto,
-                onValueChange = onMontoChange,
-                label = { Text("Monto") },
-                leadingIcon = { Text("$") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            // Campo de descripción
-            OutlinedTextField(
-                value = descripcion,
-                onValueChange = onDescripcionChange,
-                label = { Text("Descripción") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true
-            )
-
-            // Selector de categoría (Dropdown)
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = it }
-            ) {
-                OutlinedTextField(
-                    value = categoriaSeleccionada,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Categoría") },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor()
-                )
-
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    categorias.forEach { categoria ->
-                        DropdownMenuItem(
-                            text = { Text(categoria) },
-                            onClick = {
-                                onCategoriaChange(categoria)
-                                expanded = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            // Botón guardar/actualizar
-            Button(
-                onClick = onGuardar,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(if (modoEdicion) "Actualizar" else "Guardar")
-            }
-
-            // Botón cancelar edición
-            if (modoEdicion && onCancelarEdicion != null) {
-                OutlinedButton(
-                    onClick = onCancelarEdicion,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) {
-                    Text("Cancelar edición")
-                }
-            }
-        }
-    }
-}
-
-/**
- * Muestra un gasto individual en la lista.
- */
-@Composable
-fun GastoItem(
-    gasto: ExpenseEntity,
-    onEliminar: () -> Unit,
-    onEditar: () -> Unit
-) {
-    val fechaFormateada = remember(gasto.fecha) {
-        val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-        sdf.format(Date(gasto.fecha))
-    }
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = gasto.descripcion,
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                Text(
-                    text = "${gasto.categoria} • $fechaFormateada",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Text(
-                text = "$${String.format("%.2f", gasto.monto)}",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            IconButton(onClick = onEditar) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "Editar",
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            IconButton(onClick = onEliminar) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Eliminar",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    }
 }

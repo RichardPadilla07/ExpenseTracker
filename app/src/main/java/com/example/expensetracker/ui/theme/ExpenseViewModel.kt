@@ -1,154 +1,184 @@
 package com.example.expensetracker.ui.theme
 
+import android.app.AlarmManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.expensetracker.data.local.ExpenseEntity
-import com.example.expensetracker.data.respository.ExpenseRepository
+import com.example.expensetracker.data.local.MedicamentoEntity
+import com.example.expensetracker.data.local.RecordatorioEntity
+import com.example.expensetracker.data.respository.MedicamentoRepository
+import com.example.expensetracker.notifications.RecordatorioReceiver
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * ViewModel para la pantalla principal.
- *
- * Mantiene el estado de la UI y coordina las operaciones con el repositorio.
+ * ViewModel para la gestión de medicamentos y recordatorios.
  */
-class ExpenseViewModel(
-    private val repository: ExpenseRepository,
-    recordatorioActivoInicial: Boolean = true,
-    horaRecordatorioInicial: Int = 21,
-    minutoRecordatorioInicial: Int = 0
+class MedicamentoViewModel(
+    private val repository: MedicamentoRepository,
+    private val appContext: Context // Se requiere contexto para AlarmManager
 ) : ViewModel() {
-
-    // Estado del formulario de nuevo gasto
-    private val _monto = MutableStateFlow("")
-    val monto: StateFlow<String> = _monto.asStateFlow()
+    // Estado del formulario de nuevo medicamento
+    private val _nombre = MutableStateFlow("")
+    val nombre: StateFlow<String> = _nombre.asStateFlow()
 
     private val _descripcion = MutableStateFlow("")
     val descripcion: StateFlow<String> = _descripcion.asStateFlow()
 
-    private val _categoriaSeleccionada = MutableStateFlow("Comida")
-    val categoriaSeleccionada: StateFlow<String> = _categoriaSeleccionada.asStateFlow()
+    // Lista de horarios (pares hora:minuto)
+    private val _horarios = MutableStateFlow<List<Pair<Int, Int>>>(emptyList())
+    val horarios: StateFlow<List<Pair<Int, Int>>> = _horarios.asStateFlow()
 
-    // Estado del recordatorio (cargado desde preferencias)
-    private val _recordatorioActivo = MutableStateFlow(recordatorioActivoInicial)
-    val recordatorioActivo: StateFlow<Boolean> = _recordatorioActivo.asStateFlow()
-
-    // Hora del recordatorio (cargado desde preferencias)
-    private val _horaRecordatorio = MutableStateFlow(horaRecordatorioInicial)
-    val horaRecordatorio: StateFlow<Int> = _horaRecordatorio.asStateFlow()
-
-    private val _minutoRecordatorio = MutableStateFlow(minutoRecordatorioInicial)
-    val minutoRecordatorio: StateFlow<Int> = _minutoRecordatorio.asStateFlow()
-
-    // Lista de gastos (viene directo del repositorio)
-    val gastos = repository.todosLosGastos
-
-    // Total general
-    val total = repository.totalGeneral
-
-    // Categorías disponibles
-    val categorias = listOf("Comida", "Transporte", "Entretenimiento", "Servicios", "Otros")
+    // Lista de medicamentos con recordatorios
+    val medicamentosConRecordatorios = repository.obtenerMedicamentosConRecordatorios()
 
     // Funciones para actualizar el formulario
-    fun actualizarMonto(valor: String) {
-        // Solo permitimos números y un punto decimal
-        if (valor.isEmpty() || valor.matches(Regex("^\\d*\\.?\\d*$"))) {
-            _monto.value = valor
+    fun actualizarNombre(valor: String) { _nombre.value = valor }
+    fun actualizarDescripcion(valor: String) { _descripcion.value = valor }
+    fun agregarHorario(hora: Int, minuto: Int) {
+        _horarios.value = _horarios.value + (hora to minuto)
+    }
+    fun eliminarHorario(index: Int) {
+        _horarios.value = _horarios.value.toMutableList().apply { removeAt(index) }
+    }
+    fun limpiarFormulario() {
+        _nombre.value = ""
+        _descripcion.value = ""
+        _horarios.value = emptyList()
+    }
+
+    private var medicamentoEditando: MedicamentoEntity? = null
+    private var recordatoriosEditando: List<RecordatorioEntity> = emptyList()
+    val enEdicion: Boolean get() = medicamentoEditando != null
+
+    fun iniciarEdicion(medicamento: MedicamentoEntity, recordatorios: List<RecordatorioEntity>) {
+        medicamentoEditando = medicamento
+        recordatoriosEditando = recordatorios
+        _nombre.value = medicamento.nombre
+        _descripcion.value = medicamento.descripcion
+        _horarios.value = recordatorios.map { it.hora to it.minuto }
+    }
+
+    fun cancelarEdicion() {
+        medicamentoEditando = null
+        recordatoriosEditando = emptyList()
+        limpiarFormulario()
+    }
+
+    // Guardar un nuevo medicamento y sus recordatorios
+    fun guardarMedicamento() {
+        if (_nombre.value.isBlank()) return
+        viewModelScope.launch {
+            if (medicamentoEditando == null) {
+                // Crear nuevo
+                val medicamento = MedicamentoEntity(nombre = _nombre.value.trim(), descripcion = _descripcion.value.trim())
+                val id = repository.agregarMedicamento(medicamento)
+                _horarios.value.forEach { horario ->
+                    val (hora, minuto) = horario
+                    val recordatorio = RecordatorioEntity(medicamentoId = id.toInt(), hora = hora, minuto = minuto)
+                    val recId = repository.agregarRecordatorio(recordatorio)
+                    programarAlarma(medicamento.nombre, hora, minuto, recId.toInt())
+                }
+            } else {
+                // Editar existente
+                val medicamentoActualizado = medicamentoEditando!!.copy(
+                    nombre = _nombre.value.trim(),
+                    descripcion = _descripcion.value.trim()
+                )
+                repository.actualizarMedicamento(medicamentoActualizado)
+                // Eliminar recordatorios y alarmas antiguas
+                recordatoriosEditando.forEach {
+                    cancelarAlarma(it.id)
+                    repository.eliminarRecordatorio(it)
+                }
+                // Insertar nuevos recordatorios y alarmas
+                _horarios.value.forEach { horario ->
+                    val (hora, minuto) = horario
+                    val recordatorio = RecordatorioEntity(medicamentoId = medicamentoActualizado.id, hora = hora, minuto = minuto)
+                    val recId = repository.agregarRecordatorio(recordatorio)
+                    programarAlarma(medicamentoActualizado.nombre, hora, minuto, recId.toInt())
+                }
+                medicamentoEditando = null
+                recordatoriosEditando = emptyList()
+            }
+            limpiarFormulario()
         }
     }
 
-    fun actualizarDescripcion(valor: String) {
-        _descripcion.value = valor
+    private fun programarAlarma(nombre: String, hora: Int, minuto: Int, notificationId: Int) {
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(appContext, RecordatorioReceiver::class.java).apply {
+            putExtra("medicamento", nombre)
+            putExtra("hora", hora)
+            putExtra("minuto", minuto)
+            putExtra("notificationId", notificationId)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            appContext,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val calendar = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, hora)
+            set(java.util.Calendar.MINUTE, minuto)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+            if (timeInMillis <= System.currentTimeMillis()) {
+                add(java.util.Calendar.DAY_OF_YEAR, 1)
+            }
+        }
+        alarmManager.setExactAndAllowWhileIdle(
+            AlarmManager.RTC_WAKEUP,
+            calendar.timeInMillis,
+            pendingIntent
+        )
     }
 
-    fun seleccionarCategoria(categoria: String) {
-        _categoriaSeleccionada.value = categoria
+    private fun cancelarAlarma(notificationId: Int) {
+        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(appContext, RecordatorioReceiver::class.java)
+        val pendingIntent = PendingIntent.getBroadcast(
+            appContext,
+            notificationId,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
     }
 
-    /**
-     * Activa o desactiva el recordatorio.
-     */
-    fun cambiarEstadoRecordatorio(activo: Boolean) {
-        _recordatorioActivo.value = activo
-    }
-
-    /**
-     * Actualiza la hora del recordatorio.
-     */
-    fun actualizarHoraRecordatorio(hora: Int, minuto: Int) {
-        _horaRecordatorio.value = hora
-        _minutoRecordatorio.value = minuto
-    }
-
-    /**
-     * Guarda un nuevo gasto y limpia el formulario.
-     */
-    fun guardarGasto() {
-        val montoDouble = _monto.value.toDoubleOrNull()
-
-        // Validación básica
-        if (montoDouble == null || montoDouble <= 0) return
-        if (_descripcion.value.isBlank()) return
-
-        // viewModelScope cancela automáticamente si el ViewModel se destruye
+    fun eliminarMedicamento(medicamento: MedicamentoEntity) {
         viewModelScope.launch {
-            val nuevoGasto = ExpenseEntity(
-                monto = montoDouble,
-                descripcion = _descripcion.value.trim(),
-                categoria = _categoriaSeleccionada.value
-            )
-            repository.agregar(nuevoGasto)
-
-            // Limpiar formulario después de guardar
-            _monto.value = ""
-            _descripcion.value = ""
+            // Obtener recordatorios antes de eliminar
+            val recordatorios = repository.obtenerRecordatoriosDeMedicamento(medicamento.id)
+            recordatorios.collect { lista ->
+                lista.forEach { cancelarAlarma(it.id) }
+            }
+            repository.eliminarMedicamento(medicamento)
         }
     }
 
-    /**
-     * Elimina un gasto de la base de datos.
-     */
-    fun eliminarGasto(gasto: ExpenseEntity) {
+    fun eliminarRecordatorio(recordatorio: RecordatorioEntity) {
         viewModelScope.launch {
-            repository.eliminar(gasto)
-        }
-    }
-
-    /**
-     * Actualiza un gasto existente en la base de datos.
-     */
-    fun actualizarGasto(gasto: ExpenseEntity) {
-        viewModelScope.launch {
-            repository.actualizar(gasto)
+            cancelarAlarma(recordatorio.id)
+            repository.eliminarRecordatorio(recordatorio)
         }
     }
 }
 
-/**
- * Factory para crear el ViewModel con sus dependencias.
- *
- * Esto es necesario porque ViewModel no puede recibir parámetros
- * en su constructor directamente.
- */
-class ExpenseViewModelFactory(
-    private val repository: ExpenseRepository,
-    private val recordatorioActivo: Boolean,
-    private val horaRecordatorio: Int,
-    private val minutoRecordatorio: Int
+class MedicamentoViewModelFactory(
+    private val repository: MedicamentoRepository,
+    private val appContext: Context
 ) : ViewModelProvider.Factory {
-
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-        if (modelClass.isAssignableFrom(ExpenseViewModel::class.java)) {
-            return ExpenseViewModel(
-                repository,
-                recordatorioActivo,
-                horaRecordatorio,
-                minutoRecordatorio
-            ) as T
+        if (modelClass.isAssignableFrom(MedicamentoViewModel::class.java)) {
+            return MedicamentoViewModel(repository, appContext) as T
         }
         throw IllegalArgumentException("ViewModel desconocido")
     }

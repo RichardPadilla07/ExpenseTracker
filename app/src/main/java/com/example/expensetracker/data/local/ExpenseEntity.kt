@@ -1,26 +1,33 @@
 package com.example.expensetracker.data.local
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 
-@Entity (tableName = "gastos")
-data class ExpenseEntity(
-
-    // la clave primaria identifica cada registro de forma unica
-    // autoGenerate = true hace que room asigne el ID automaticamente
+@Entity(tableName = "medicamentos")
+data class MedicamentoEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Int = 0,
+    val nombre: String,
+    val descripcion: String = ""
+)
 
-    // monto del gasto
-    val monto: Double,
-
-    // descripcion
-    val descripcion: String,
-
-    // categoria que ayuda a organizar: comida, transporte, entretenimiento, etc
-    val categoria: String,
-
-    // GUardamos la fecha como timestamp en milisegundos
-    // Es mas facil de manejar y comparar fechas asi
-    val fecha: Long = System.currentTimeMillis()
+@Entity(
+    tableName = "recordatorios",
+    foreignKeys = [
+        ForeignKey(
+            entity = MedicamentoEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["medicamentoId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ]
+)
+data class RecordatorioEntity(
+    @PrimaryKey(autoGenerate = true)
+    val id: Int = 0,
+    val medicamentoId: Int,
+    val hora: Int, // 0-23
+    val minuto: Int, // 0-59
+    val dias: String = "todos" // para futuras mejoras: días específicos
 )

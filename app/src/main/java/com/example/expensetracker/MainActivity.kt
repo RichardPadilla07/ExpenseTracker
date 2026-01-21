@@ -16,11 +16,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.expensetracker.alarm.ReminderPreferences
 import com.example.expensetracker.alarm.ReminderScheduler
 import com.example.expensetracker.data.local.AppDatabase
-import com.example.expensetracker.data.respository.ExpenseRepository
-import com.example.expensetracker.ui.theme.ExpenseScreen
+import com.example.expensetracker.data.respository.MedicamentoRepository
 import com.example.expensetracker.ui.theme.ExpenseTrackerTheme
-import com.example.expensetracker.ui.theme.ExpenseViewModel
-import com.example.expensetracker.ui.theme.ExpenseViewModelFactory
+import com.example.expensetracker.ui.theme.MedicamentoScreen
+import com.example.expensetracker.ui.theme.MedicamentoViewModel
+import com.example.expensetracker.ui.theme.MedicamentoViewModelFactory
 
 class MainActivity : ComponentActivity() {
 
@@ -42,19 +42,8 @@ class MainActivity : ComponentActivity() {
 
         // Crear dependencias
         val database = AppDatabase.getInstance(applicationContext)
-        val repository = ExpenseRepository(database.expenseDao())
-
-        // Cargar preferencias guardadas
-        val recordatorioActivo = ReminderPreferences.estaActivo(this)
-        val horaGuardada = ReminderPreferences.obtenerHora(this)
-        val minutoGuardado = ReminderPreferences.obtenerMinuto(this)
-
-        val viewModelFactory = ExpenseViewModelFactory(
-            repository,
-            recordatorioActivo,
-            horaGuardada,
-            minutoGuardado
-        )
+        val repository = MedicamentoRepository(database.medicamentoDao())
+        val viewModelFactory = MedicamentoViewModelFactory(repository, applicationContext)
 
         setContent {
             ExpenseTrackerTheme {
@@ -62,14 +51,8 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    val viewModel: ExpenseViewModel = viewModel(factory = viewModelFactory)
-
-                    ExpenseScreen(
-                        viewModel = viewModel,
-                        onRecordatorioChange = { activo, hora, minuto ->
-                            manejarCambioRecordatorio(activo, hora, minuto)
-                        }
-                    )
+                    val viewModel: MedicamentoViewModel = viewModel(factory = viewModelFactory)
+                    MedicamentoScreen(viewModel = viewModel)
                 }
             }
         }

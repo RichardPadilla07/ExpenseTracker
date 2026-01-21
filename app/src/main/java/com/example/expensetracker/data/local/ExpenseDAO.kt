@@ -2,59 +2,52 @@ package com.example.expensetracker.data.local
 
 import androidx.room.Dao
 import androidx.room.Delete
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Relation
+import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
-/**
- * Define las operaciones disponibles para la tabla de gastos.
- *
- * Room genera la implementación automáticamente basándose
- * en las anotaciones y los tipos de retorno.
- */
 @Dao
-interface ExpenseDao {
+interface MedicamentoDao {
+    @Query("SELECT * FROM medicamentos ORDER BY nombre ASC")
+    fun obtenerTodosMedicamentos(): Flow<List<MedicamentoEntity>>
 
-    /**
-     * Obtiene todos los gastos ordenados del más reciente al más antiguo.
-     *
-     * Retorna Flow para que la UI se actualice automáticamente
-     * cuando haya cambios en la base de datos.
-     */
-    @Query("SELECT * FROM gastos ORDER BY fecha DESC")
-    fun obtenerTodos(): Flow<List<ExpenseEntity>>
-
-    /**
-     * Calcula el total gastado en una categoría específica.
-     * Útil para mostrar estadísticas.
-     */
-    @Query("SELECT SUM(monto) FROM gastos WHERE categoria = :categoria")
-    fun totalPorCategoria(categoria: String): Flow<Double?>
-
-    /**
-     * Calcula el total de todos los gastos.
-     */
-    @Query("SELECT SUM(monto) FROM gastos")
-    fun totalGeneral(): Flow<Double?>
-
-    /**
-     * Inserta un nuevo gasto.
-     * suspend indica que es una operación asíncrona (no bloquea el hilo principal).
-     */
     @Insert
-    suspend fun insertar(gasto: ExpenseEntity)
+    suspend fun insertarMedicamento(medicamento: MedicamentoEntity): Long
 
-    /**
-     * Actualiza un gasto existente.
-     * Room usa el ID para saber cuál actualizar.
-     */
     @Update
-    suspend fun actualizar(gasto: ExpenseEntity)
+    suspend fun actualizarMedicamento(medicamento: MedicamentoEntity)
 
-    /**
-     * Elimina un gasto.
-     */
     @Delete
-    suspend fun eliminar(gasto: ExpenseEntity)
+    suspend fun eliminarMedicamento(medicamento: MedicamentoEntity)
+
+    // Recordatorios
+    @Query("SELECT * FROM recordatorios WHERE medicamentoId = :medicamentoId")
+    fun obtenerRecordatoriosDeMedicamento(medicamentoId: Int): Flow<List<RecordatorioEntity>>
+
+    @Insert
+    suspend fun insertarRecordatorio(recordatorio: RecordatorioEntity): Long
+
+    @Update
+    suspend fun actualizarRecordatorio(recordatorio: RecordatorioEntity)
+
+    @Delete
+    suspend fun eliminarRecordatorio(recordatorio: RecordatorioEntity)
+
+    // Consulta para obtener medicamentos con sus recordatorios
+    @Transaction
+    @Query("SELECT * FROM medicamentos")
+    fun obtenerMedicamentosConRecordatorios(): Flow<List<MedicamentoConRecordatorios>>
 }
+
+data class MedicamentoConRecordatorios(
+    @Embedded val medicamento: MedicamentoEntity,
+    @Relation(
+        parentColumn = "id",
+        entityColumn = "medicamentoId"
+    )
+    val recordatorios: List<RecordatorioEntity>
+)

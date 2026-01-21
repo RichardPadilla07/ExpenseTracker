@@ -13,14 +13,14 @@ import androidx.room.RoomDatabase
  * - version: versión del esquema (importante para migraciones)
  */
 @Database(
-    entities = [ExpenseEntity::class],
+    entities = [MedicamentoEntity::class, RecordatorioEntity::class],
     version = 1,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
 
     // Room implementa esto automáticamente
-    abstract fun expenseDao(): ExpenseDao
+    abstract fun medicamentoDao(): MedicamentoDao
 
     companion object {
         /*
@@ -41,7 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "expense_database"  // nombre del archivo .db
+                    "medicamento_database"  // nombre del archivo .db
                 ).build()
 
                 INSTANCE = instance

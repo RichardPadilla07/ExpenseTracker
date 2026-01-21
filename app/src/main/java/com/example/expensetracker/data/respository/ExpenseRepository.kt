@@ -1,37 +1,17 @@
 package com.example.expensetracker.data.respository
 
-import com.example.expensetracker.data.local.ExpenseDao
-import com.example.expensetracker.data.local.ExpenseEntity
-import kotlinx.coroutines.flow.Flow
+import com.example.expensetracker.data.local.MedicamentoDao
+import com.example.expensetracker.data.local.MedicamentoEntity
+import com.example.expensetracker.data.local.RecordatorioEntity
 
-/**
- * Repositorio que centraliza el acceso a los datos de gastos.
- *
- * Actualmente solo usa Room, pero podría agregar:
- * - Caché en memoria
- * - Sincronización con API remota
- * - Validaciones de negocio
- */
-class ExpenseRepository(private val dao: ExpenseDao) {
+class MedicamentoRepository(private val dao: MedicamentoDao) {
+    fun obtenerMedicamentosConRecordatorios() = dao.obtenerMedicamentosConRecordatorios()
+    suspend fun agregarMedicamento(medicamento: MedicamentoEntity) = dao.insertarMedicamento(medicamento)
+    suspend fun actualizarMedicamento(medicamento: MedicamentoEntity) = dao.actualizarMedicamento(medicamento)
+    suspend fun eliminarMedicamento(medicamento: MedicamentoEntity) = dao.eliminarMedicamento(medicamento)
 
-    // Exponemos los datos como Flow para reactividad
-    val todosLosGastos: Flow<List<ExpenseEntity>> = dao.obtenerTodos()
-
-    val totalGeneral: Flow<Double?> = dao.totalGeneral()
-
-    fun totalPorCategoria(categoria: String): Flow<Double?> {
-        return dao.totalPorCategoria(categoria)
-    }
-
-    suspend fun agregar(gasto: ExpenseEntity) {
-        dao.insertar(gasto)
-    }
-
-    suspend fun actualizar(gasto: ExpenseEntity) {
-        dao.actualizar(gasto)
-    }
-
-    suspend fun eliminar(gasto: ExpenseEntity) {
-        dao.eliminar(gasto)
-    }
+    fun obtenerRecordatoriosDeMedicamento(medicamentoId: Int) = dao.obtenerRecordatoriosDeMedicamento(medicamentoId)
+    suspend fun agregarRecordatorio(recordatorio: RecordatorioEntity) = dao.insertarRecordatorio(recordatorio)
+    suspend fun actualizarRecordatorio(recordatorio: RecordatorioEntity) = dao.actualizarRecordatorio(recordatorio)
+    suspend fun eliminarRecordatorio(recordatorio: RecordatorioEntity) = dao.eliminarRecordatorio(recordatorio)
 }

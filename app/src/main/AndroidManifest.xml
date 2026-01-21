@@ -27,5 +27,9 @@
             android:name=".alarm.AlarmReceiver"
             android:enabled="true"
             android:exported="false" />
+        <receiver
+            android:name=".notifications.RecordatorioReceiver"
+            android:enabled="true"
+            android:exported="false" />
     </application>
 </manifest>
